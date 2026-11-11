@@ -32,7 +32,9 @@ CAP = 0.99              # a place never sums to 1
 AGE_HOURS = 300.0
 MAX_ROWS = 5
 NAMED_SHARE = 0.6
-BETA = 0
+BETA = 0.9
+ALPHA = 0.3
+LAM = 0.7
 TEMP = 1.0
 
 
@@ -331,7 +333,7 @@ def log_score(rows, reads, places=10, floor=0.0001):
     return total / len(reads) if reads else float("-inf")
 
 
-SHAPES = ((1, 0.09), (1, 0.16), (2, 0.22), (3, 0.30), (5, 0.35))
+SHAPES = ((1, 0.15), (1, 0.20), (2, 0.18))
 
 
 def choose_shape(states, seed, places):
@@ -363,15 +365,21 @@ def build(states, par, slots, rng, places):
 def _build(states, par, slots, rng, places, shape):
     max_rows, named_share = shape
     occ = roll(states, par, slots)
-    prior = 0.10 / max(len(occ), 1)
-    boost = {u: math.exp(BETA * trend_of(states, len(states) - 1, u)) for u in occ}
+    order = states[-1]["order"]
+    rank_of = {u: i + 1 for i, u in enumerate(order)}
     rows = []
+    weights = {}
     for k in range(1, places + 1):
         mass = {}
-        for u, o in occ.items():
-            p = ((o[k] / slots + prior) * boost[u]) ** TEMP
-            if p > 0:
-                mass[u] = p
+        for u in order[:SRC_DEPTH]:
+            v = occ.get(u, [0.0] * (BAND_TOP + 1))[k] + 1e-4
+            # the kernel's occupancy, pulled towards the game's own place: the chart keeps most
+            # of its places hour to hour, and the ladder alone over-shoots it
+            w = (v ** ALPHA) * math.exp(-LAM * abs(rank_of[u] - k)) \
+                * math.exp(BETA * trend_of(states, len(states) - 1, u))
+            if w > 0:
+                mass[u] = w
+                weights[(k, u)] = w
         keep = sorted(mass.items(), key=lambda kv: (-kv[1], kv[0]))[:max_rows]
         tot = sum(p for _, p in keep) or 1.0
         # named_share of the place is named, the rest stays unnamed for the games the roll
@@ -380,9 +388,10 @@ def _build(states, par, slots, rng, places, shape):
             rows.append({"universe_id": u, "place": k, "p": round(max(named_share * p / tot, FLOOR), 6)})
     rows.sort(key=lambda r: (r["place"], -r["p"], r["universe_id"]))
     score = {}
-    for u, o in occ.items():
-        score[u] = sum(o[k] / slots * (places + 1 - k) for k in range(1, places + 1))
-    top10 = [u for u, _ in sorted(score.items(), key=lambda kv: (-kv[1], kv[0]))][:places]
+    for (k, u), v in weights.items():
+        score[u] = score.get(u, 0.0) + v * (places + 1 - k)
+    # the chart's own top 10, in its own order: the best membership and agreement there is
+    top10 = order[:places]
     return {"probabilities": rows, "top10": top10}
 
 
