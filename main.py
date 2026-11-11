@@ -427,24 +427,41 @@ def _build(states, par, slots, rng, places, shape):
     return {"probabilities": rows, "top10": top10}
 
 
+def flat_forecast(states, places):
+    """Last resort when the history is too thin to model: even spread over the chart we can see."""
+    if not states:
+        return {"probabilities": [], "top10": []}
+    order = states[-1]["order"]
+    rows = []
+    for k in range(1, places + 1):
+        band = order[max(k - 4, 0):k + 4] or order[:1]
+        share = 0.6 / max(len(band), 1)
+        for u in band:
+            rows.append({"universe_id": u, "place": k, "p": round(share, 6)})
+    rows.sort(key=lambda r: (r["place"], -r["p"], r["universe_id"]))
+    return {"probabilities": rows, "top10": order[:places]}
+
+
 def main():
     task, raw = read_inputs()
     states = parse(raw)
-    if len(states) < 3:
-        raise SystemExit("history too short")
     slots = int(task["window"]["slots"])
     places = int(task.get("places", 10))
     seed = int.from_bytes(hashlib.sha256(raw).digest()[:8], "big")
     rng = random.Random(seed)
-    par = estimate(states, slots * float(task["window"].get("slot_minutes", 60)) / 60.0)
-    out = build(states, par, slots, rng, places)
+    if len(states) >= 3:
+        par = estimate(states, slots * float(task["window"].get("slot_minutes", 60)) / 60.0)
+        out = build(states, par, slots, rng, places)
+        note = "mean_gap %.2f" % par["mean_dt"]
+    else:
+        out = flat_forecast(states, places)
+        note = "fallback"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     path = os.path.join(OUTPUT_DIR, task.get("output", "forecast.json"))
     with open(path, "w", encoding="utf-8") as f:
         f.write(json.dumps(out, ensure_ascii=False, sort_keys=False, separators=(",", ":")))
         f.write("\n")
-    print("rows", len(out["probabilities"]), "top10", len(out["top10"]),
-          "mean_gap", round(par["mean_dt"], 2))
+    print("rows", len(out["probabilities"]), "top10", len(out["top10"]), note)
 
 
 if __name__ == "__main__":
