@@ -32,9 +32,9 @@ CAP = 0.99              # a place never sums to 1
 AGE_HOURS = 300.0
 MAX_ROWS = 5
 NAMED_SHARE = 0.6
-BETA = 0.9
-ALPHA = 1.0
-LAM = 0.2
+BETA = 0.4
+ALPHA = 0.4
+LAM = 0.1
 AGE_B = 0.35
 TEMP = 1.0
 
