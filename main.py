@@ -2,17 +2,23 @@
 """Forecast Roblox's Up-and-Coming top 10, place by place, for 72 hours.
 
 The chart is a rank process with birth and death, not a fixed order: games climb, fall out of the
-top 10, and new ones (published within 28 days) join. So the model is
+top 10, and new games (published within 28 days) join as old ones age off. So the model is
 
-  * per-place, per-hour hazards of staying, moving up, moving down or leaving the top 10,
-    estimated from consecutive reads with Laplace smoothing and pooled over neighbouring places,
-  * a trend multiplier from each game's players over its last reads (rising games climb, sinking
-    ones slide) and a mild age multiplier (an older game has less room under the 28-day rule),
-  * a birth stream from the pool just below the top 10 that keeps the population exact,
-  * an exact distribution rolled forward hour by hour (no sampling noise), averaged over the
-    window's slots into one static forecast.
+  * transition kernels per horizon band, trend class and source place, measured from ordered pairs
+    of reads — where a game at place k actually landed after that many hours, Laplace-smoothed and
+    pooled over neighbouring places — so long gaps come from real long-gap pairs,
+  * each band weighted by how many hours of the window sit at it, giving the average over the
+    window in one step instead of an extrapolated single step,
+  * vertices beyond the top 10 kept as a ladder (the pool the chart's newcomers come from) with
+    their mass spilled onto the games just below it,
+  * a per-place ranking that pulls a game towards the place it already holds and nudges it by its
+    trend, with the games published recently lifted and the nearly-28-day-old pushed down when the
+    reads carry created times,
+  * each place cut to its sharpest names and the rest left unnamed, for the games the history
+    cannot know about.
 
-Stdlib only, no network, byte-identical for the same history (the seed is its sha256).
+Stdlib only, no network, byte-identical for the same history (randomness is seeded from its
+sha256).
 """
 import hashlib
 import json
@@ -25,18 +31,12 @@ INPUT_DIR = os.environ.get("MAKEFUN_INPUT_DIR") or "/input"
 OUTPUT_DIR = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
 
 BAND_TOP = 10           # places that are scored
-BAND = 20               # ranks simulated explicitly (10..20 are the ladder into the top 10)
-POOL_DEPTH = 97         # rarest rung a newcomer can be drawn from
+BAND = 20               # ranks the kernels keep; 10..20 are the ladder into the top 10
 FLOOR = 0.0002          # never below this: a miss costs ln(0.0002), not the ln(0.0001) floor
-CAP = 0.99              # a place never sums to 1
-AGE_HOURS = 300.0
-MAX_ROWS = 5
-NAMED_SHARE = 0.6
 BETA = 0.4
 ALPHA = 0.4
 LAM = 0.1
 AGE_B = 0.35
-TEMP = 1.0
 
 
 def read_inputs():
