@@ -35,6 +35,7 @@ NAMED_SHARE = 0.6
 BETA = 0.9
 ALPHA = 1.0
 LAM = 0.2
+AGE_B = 0.35
 TEMP = 1.0
 
 
@@ -66,15 +67,33 @@ def parse(raw):
         order = []
         players = {}
         names = {}
+        created = {}
+        details = rec.get("details") or {}
         for r in rows:
             u = r["universe_id"]
             order.append(u)
             players[u] = r.get("playing") or 0
             names[u] = r.get("name") or ""
+            made = (details.get(str(u)) or {}).get("created") if isinstance(details, dict) else None
+            if isinstance(made, str):
+                try:
+                    created[u] = dt.datetime.fromisoformat(made.replace("Z", "+00:00"))
+                except ValueError:
+                    pass
         at = dt.datetime.fromisoformat(rec["at"].replace("Z", "+00:00"))
-        states.append({"at": at, "order": order, "players": players, "names": names})
+        states.append({"at": at, "order": order, "players": players, "names": names,
+                       "created": created})
     states.sort(key=lambda s: s["at"])
     return states
+
+
+def age_days(states, u):
+    """How old the game is, from Roblox's own created time where a read carries it."""
+    for s in reversed(states):
+        made = s["created"].get(u)
+        if made is not None:
+            return clamp((s["at"] - made).total_seconds() / 86400.0, 0.0, 40.0)
+    return None
 
 
 def hours_between(a, b):
@@ -384,6 +403,12 @@ def _build(states, par, slots, rng, places, shape):
             # of its places hour to hour, and the ladder alone over-shoots it
             w = (v ** ALPHA) * math.exp(-LAM * abs(rank_of[u] - k)) \
                 * math.exp(BETA * trend_of(states, len(states) - 1, u))
+            made = age_days(states, u)
+            if made is not None:
+                # a game published days ago has the 28-day rule still ahead of it; an old one is
+                # close to ageing out. Unknown ages are left neutral, so a history without
+                # created times forecasts exactly as it would without this term.
+                w *= math.exp(AGE_B * (14.0 - made) / 14.0)
             if w > 0:
                 mass[u] = w
                 weights[(k, u)] = w
