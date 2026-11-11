@@ -24,11 +24,17 @@ process rather than a fixed order:
 4. **Inflow.** What falls off the ladder is given to the games just below the top 10, weighted by
    proximity and trend — the pool the chart's newcomers actually come from. Games published after
    the close cannot be named; the unnamed share of each place is left for them.
-5. **Answer.** Per place, the sharpest few games are named and the rest of the place is left
-   unnamed (a place's unnamed share is spread over every game the read has that the row does not
-   name, so naming a game the model only half believes is worse than leaving it). Every
-   probability is at or above `0.0002`, each place sums to at most `0.96`, and the top 10 is ranked
-   by place-weighted occupancy.
+5. **Answer.** Per place, the games are ranked by that occupancy, pulled towards the place they
+   already hold (the chart keeps most of its places hour to hour, and the ladder alone over-shoots
+   it) and nudged by trend, then cut to a fixed number of names. The rest of the place is left
+   unnamed: a place's unnamed share is spread over every game the read has that the row does not
+   name, so naming a game the model barely believes is worse than leaving it. Every probability is
+   at or above `0.0002`, each place sums to at most `0.7`, and the top 10 is the chart's own top 10
+   in its own order — the best membership and agreement guess there is.
+
+Where a read carries Roblox's `created` time for a game, its age shifts it up while it is young
+and down as it nears the 28-day limit. A history without those times (the public archive carries
+none) forecasts exactly as it would with the term switched off.
 
 How sharp to be is not a constant: the program scores a few settings on inner holdouts of the
 history it was given and uses the winner, so it adapts to how much history there is.
