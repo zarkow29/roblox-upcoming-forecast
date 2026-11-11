@@ -33,8 +33,8 @@ AGE_HOURS = 300.0
 MAX_ROWS = 5
 NAMED_SHARE = 0.6
 BETA = 0.9
-ALPHA = 0.3
-LAM = 0.7
+ALPHA = 1.0
+LAM = 0.2
 TEMP = 1.0
 
 
@@ -310,6 +310,13 @@ def roll(states, par, slots):
             continue
         for u, w in pool.items():
             occ.setdefault(u, [0.0] * (BAND_TOP + 1))[k] += share * (w / tot)
+    # many games each carry a distribution over the places, so a place's mass sums far above one:
+    # scale each place so it reads as a probability over games again
+    for k in range(1, BAND_TOP + 1):
+        s = sum(v[k] for v in occ.values())
+        if s > 0:
+            for v in occ.values():
+                v[k] /= s
     return occ
 
 
@@ -333,7 +340,7 @@ def log_score(rows, reads, places=10, floor=0.0001):
     return total / len(reads) if reads else float("-inf")
 
 
-SHAPES = ((1, 0.15), (1, 0.20), (2, 0.18))
+SHAPES = ((3, 0.35), (5, 0.5))
 
 
 def choose_shape(states, seed, places):
