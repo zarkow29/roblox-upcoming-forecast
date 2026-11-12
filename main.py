@@ -359,7 +359,7 @@ def log_score(rows, reads, places=10, floor=0.0001):
     return total / len(reads) if reads else float("-inf")
 
 
-SHAPES = ((20, 0.85),)
+SHAPES = ((28, 0.92),)
 
 
 def choose_shape(states, seed, places):
